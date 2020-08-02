@@ -1,8 +1,8 @@
 use super::*;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct HitableList {
-    pub objects: Vec<Rc<dyn Hitable>>,
+    pub objects: Vec<Arc<dyn Hitable + Send + Sync>>,
 }
 
 impl HitableList {
@@ -14,7 +14,7 @@ impl HitableList {
     pub fn clear(&mut self) {
         self.objects.clear();
     }
-    pub fn add(&mut self, object: Rc<dyn Hitable>) {
+    pub fn add(&mut self, object: Arc<dyn Hitable + Send + Sync>) {
         self.objects.push(object);
     }
 }
@@ -35,3 +35,6 @@ impl Hitable for HitableList {
         hit_anything
     }
 }
+
+unsafe impl Send for HitableList {}
+unsafe impl Sync for HitableList {}

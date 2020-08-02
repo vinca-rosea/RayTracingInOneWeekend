@@ -15,10 +15,11 @@ use hitable_list::*;
 use material::*;
 use rand::Rng;
 use ray::*;
+use rayon::prelude::*;
 use rtweekend::*;
 use sphere::*;
 use std::io::Write;
-use std::rc::Rc;
+use std::sync::Arc;
 use vec3::*;
 
 fn ray_color(r: &Ray, world: &dyn Hitable, depth: i64) -> Color {
@@ -48,8 +49,8 @@ fn ray_color(r: &Ray, world: &dyn Hitable, depth: i64) -> Color {
 fn random_scene() -> HitableList {
     let mut world = HitableList::new();
     //let ground_material = Rc::new(Lambertian::new(Color::new(0.5, 0.5, 0.5)));
-    let ground_material = Rc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
-    world.add(Rc::new(Sphere::new(
+    let ground_material = Arc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
+    world.add(Arc::new(Sphere::new(
         Point3::new(0.0, -1000.0, 0.0),
         1000.0,
         ground_material,
@@ -68,39 +69,39 @@ fn random_scene() -> HitableList {
                 if choose_mat < 0.8 {
                     // diffuse
                     let albedo = &Color::random() * &Color::random();
-                    let sphere_material = Rc::new(Lambertian::new(albedo));
-                    world.add(Rc::new(Sphere::new(center, 0.2, sphere_material)));
+                    let sphere_material = Arc::new(Lambertian::new(albedo));
+                    world.add(Arc::new(Sphere::new(center, 0.2, sphere_material)));
                 } else if choose_mat < 0.95 {
                     // metal
                     let albedo = Color::random_minmax(0.5, 1.0);
                     let fuzz = random_double_minmax(0.0, 0.5);
-                    let sphere_material = Rc::new(Metal::new(albedo, fuzz));
-                    world.add(Rc::new(Sphere::new(center, 0.2, sphere_material)));
+                    let sphere_material = Arc::new(Metal::new(albedo, fuzz));
+                    world.add(Arc::new(Sphere::new(center, 0.2, sphere_material)));
                 } else {
                     // glass
-                    let sphere_material = Rc::new(Dielectric::new(1.5));
-                    world.add(Rc::new(Sphere::new(center, 0.2, sphere_material)));
+                    let sphere_material = Arc::new(Dielectric::new(1.5));
+                    world.add(Arc::new(Sphere::new(center, 0.2, sphere_material)));
                 }
             }
         }
     }
 
-    let material1 = Rc::new(Dielectric::new(1.5));
-    world.add(Rc::new(Sphere::new(
+    let material1 = Arc::new(Dielectric::new(1.5));
+    world.add(Arc::new(Sphere::new(
         Point3::new(0.0, 1.0, 0.0),
         1.0,
         material1,
     )));
 
-    let material2 = Rc::new(Lambertian::new(Color::new(0.4, 0.2, 0.1)));
-    world.add(Rc::new(Sphere::new(
+    let material2 = Arc::new(Lambertian::new(Color::new(0.4, 0.2, 0.1)));
+    world.add(Arc::new(Sphere::new(
         Point3::new(-4.0, 1.0, 0.0),
         1.0,
         material2,
     )));
 
-    let material3 = Rc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
-    world.add(Rc::new(Sphere::new(
+    let material3 = Arc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
+    world.add(Arc::new(Sphere::new(
         Point3::new(4.0, 1.0, 0.0),
         1.0,
         material3,
@@ -112,9 +113,6 @@ fn random_scene() -> HitableList {
 fn main() -> std::io::Result<()> {
     let out = std::io::stdout();
     let mut out = std::io::BufWriter::new(out.lock());
-
-    let err = std::io::stderr();
-    let mut err = std::io::BufWriter::new(err.lock());
 
     // Image
     const ASPECT_RATIO: f64 = 16.0 / 9.0;
@@ -150,20 +148,38 @@ fn main() -> std::io::Result<()> {
     writeln!(out, "{} {}", IMAGE_WIDTH, IMAGE_HEIGHT)?;
     writeln!(out, "255")?;
 
-    for j in (0..IMAGE_HEIGHT).rev() {
-        writeln!(err, "Scanlines remaining: {} ", j)?;
-        err.flush()?;
-        for i in 0..IMAGE_WIDTH {
-            let mut pixel_color = Color::new(0.0, 0.0, 0.0);
-            for s in 0..SAMPLES_PER_PIXEL {
-                let u = (i as f64 + random_double()) / (IMAGE_WIDTH as f64 - 1.0);
-                let v = (j as f64 + random_double()) / (IMAGE_HEIGHT as f64 - 1.0);
-                let r = cam.get_ray(u, v);
-                pixel_color += ray_color(&r, &world, MAX_DEPTH);
+    let mut result: Vec<Vec<(i64, i64, i64)>> = Vec::with_capacity(IMAGE_HEIGHT as usize);
+    (0..IMAGE_HEIGHT as i32)
+        .into_par_iter()
+        .rev()
+        .map(|j| {
+            let mut err = std::io::stderr();
+
+            writeln!(err, "Scanlines remaining: {} ", j);
+            let mut color: Vec<(i64, i64, i64)> = Vec::with_capacity(IMAGE_WIDTH as usize);
+
+            for i in 0..IMAGE_WIDTH {
+                let mut pixel_color = Color::new(0.0, 0.0, 0.0);
+                for s in 0..SAMPLES_PER_PIXEL {
+                    let u = (i as f64 + random_double()) / (IMAGE_WIDTH as f64 - 1.0);
+                    let v = (j as f64 + random_double()) / (IMAGE_HEIGHT as f64 - 1.0);
+                    let r = cam.get_ray(u, v);
+                    pixel_color += ray_color(&r, &world, MAX_DEPTH);
+                }
+                color.push(get_color(pixel_color, SAMPLES_PER_PIXEL));
             }
-            write_color(&mut out, pixel_color, SAMPLES_PER_PIXEL)?;
-        }
-    }
+            color
+        })
+        .collect_into_vec(&mut result);
+
+    let mut err = std::io::stderr();
+    writeln!(err, "File output start.")?;
+    result.iter().for_each(|row| {
+        row.iter().for_each(|col| {
+            writeln!(out, "{} {} {}", col.0, col.1, col.2,);
+        });
+    });
+
     writeln!(err, "Done.")?;
     Ok(())
 }

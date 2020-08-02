@@ -1,10 +1,10 @@
 use super::*;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct HitRecord {
     pub p: Vec3,
     pub normal: Vec3,
-    pub mat_ptr: Rc<dyn Material>,
+    pub mat_ptr: Arc<dyn Material>,
     pub t: f64,
     pub front_face: bool,
 }
@@ -14,7 +14,7 @@ impl Default for HitRecord {
         Self {
             p: Default::default(),
             normal: Default::default(),
-            mat_ptr: Rc::new(UninitMaterial {}),
+            mat_ptr: Arc::new(UninitMaterial {}),
             t: Default::default(),
             front_face: Default::default(),
         }
@@ -22,7 +22,7 @@ impl Default for HitRecord {
 }
 
 impl HitRecord {
-    pub fn new(p: Vec3, normal: Vec3, mat_ptr: Rc<dyn Material>, t: f64, front_face: bool) -> Self {
+    pub fn new(p: Vec3, normal: Vec3, mat_ptr: Arc<dyn Material>, t: f64, front_face: bool) -> Self {
         Self {
             p,
             normal,

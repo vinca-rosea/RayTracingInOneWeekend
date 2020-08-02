@@ -1,14 +1,14 @@
 use super::*;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct Sphere {
     pub center: Vec3,
     pub radius: f64,
-    pub mat_ptr: Rc<dyn Material>,
+    pub mat_ptr: Arc<dyn Material>,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f64, mat_ptr: Rc<dyn Material>) -> Self {
+    pub fn new(center: Vec3, radius: f64, mat_ptr: Arc<dyn Material>) -> Self {
         Self {
             center,
             radius,
@@ -49,3 +49,6 @@ impl Hitable for Sphere {
         false
     }
 }
+
+unsafe impl Send for Sphere {}
+unsafe impl Sync for Sphere {}
